@@ -224,8 +224,138 @@ function StitchedHeart({ progress, size = 120, sealed = false, className = "" })
   );
 }
 
+/* ------------------------------------------------------------------
+   AMBIENT AUDIO — generated entirely in-browser via Web Audio API.
+   An Am-chord pad + slow heartbeat bass + drifting melodic arpeggio.
+   No external files needed — works offline and on mobile.
+------------------------------------------------------------------- */
+function useAmbientAudio() {
+  const ctxRef = useRef(null);
+  const masterRef = useRef(null);
+  const intervalsRef = useRef([]);
+  const [playing, setPlaying] = useState(false);
+
+  const stop = useCallback(() => {
+    if (masterRef.current && ctxRef.current) {
+      const t = ctxRef.current.currentTime;
+      masterRef.current.gain.linearRampToValueAtTime(0, t + 1.8);
+    }
+    intervalsRef.current.forEach(id => clearInterval(id));
+    intervalsRef.current = [];
+    setTimeout(() => {
+      if (ctxRef.current) { ctxRef.current.close(); ctxRef.current = null; }
+      masterRef.current = null;
+    }, 2000);
+    setPlaying(false);
+  }, []);
+
+  const start = useCallback(() => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    ctxRef.current = ctx;
+
+    // Master bus with slow fade-in
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0, ctx.currentTime);
+    master.gain.linearRampToValueAtTime(0.28, ctx.currentTime + 4);
+    master.connect(ctx.destination);
+    masterRef.current = master;
+
+    // Am chord pad: A2, E3, A3, C4, E4, G4 — warm sine waves with subtle detuning
+    [
+      { freq: 110.0, gain: 0.22, detune: -4 },
+      { freq: 164.8, gain: 0.16, detune:  5 },
+      { freq: 220.0, gain: 0.18, detune: -2 },
+      { freq: 261.6, gain: 0.13, detune:  3 },
+      { freq: 329.6, gain: 0.10, detune: -5 },
+      { freq: 392.0, gain: 0.07, detune:  2 },
+    ].forEach(({ freq, gain, detune }) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.detune.value = detune;
+      g.gain.value = gain;
+      osc.connect(g);
+      g.connect(master);
+      osc.start();
+    });
+
+    // Slow tremolo LFO — 0.18 Hz = very gentle breathing swell
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.18;
+    lfoGain.gain.value = 0.06;
+    lfo.connect(lfoGain);
+    lfoGain.connect(master.gain);
+    lfo.start();
+
+    // Melodic arpeggio — Am7 notes cycling every 2.4 s
+    const melody = [440.0, 523.2, 659.3, 783.9, 523.2, 392.0];
+    let noteIdx = 0;
+    const playNote = () => {
+      if (!ctxRef.current || ctxRef.current.state === "closed") return;
+      const t = ctxRef.current.currentTime;
+      const osc = ctxRef.current.createOscillator();
+      const env = ctxRef.current.createGain();
+      osc.type = "sine";
+      osc.frequency.value = melody[noteIdx % melody.length];
+      noteIdx++;
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.045, t + 0.4);
+      env.gain.linearRampToValueAtTime(0.028, t + 1.2);
+      env.gain.linearRampToValueAtTime(0, t + 2.3);
+      osc.connect(env); env.connect(master);
+      osc.start(t); osc.stop(t + 2.4);
+    };
+    playNote();
+    intervalsRef.current.push(setInterval(playNote, 2400));
+
+    // Heartbeat bass: lub-DUB at ~62 BPM, very soft
+    const beatMs = (60 / 62) * 1000;
+    const playHeartbeat = () => {
+      if (!ctxRef.current || ctxRef.current.state === "closed") return;
+      const t = ctxRef.current.currentTime;
+      const b1 = ctxRef.current.createOscillator();
+      const g1 = ctxRef.current.createGain();
+      b1.type = "sine"; b1.frequency.value = 52;
+      g1.gain.setValueAtTime(0, t);
+      g1.gain.linearRampToValueAtTime(0.13, t + 0.04);
+      g1.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+      b1.connect(g1); g1.connect(master);
+      b1.start(t); b1.stop(t + 0.4);
+      const b2 = ctxRef.current.createOscillator();
+      const g2 = ctxRef.current.createGain();
+      b2.type = "sine"; b2.frequency.value = 46;
+      g2.gain.setValueAtTime(0, t + 0.2);
+      g2.gain.linearRampToValueAtTime(0.09, t + 0.24);
+      g2.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      b2.connect(g2); g2.connect(master);
+      b2.start(t + 0.2); b2.stop(t + 0.6);
+    };
+    playHeartbeat();
+    intervalsRef.current.push(setInterval(playHeartbeat, beatMs));
+
+    setPlaying(true);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (playing) stop(); else start();
+  }, [playing, start, stop]);
+
+  useEffect(() => () => {
+    intervalsRef.current.forEach(id => clearInterval(id));
+    if (ctxRef.current) ctxRef.current.close();
+  }, []);
+
+  return { playing, toggle };
+}
+
 export default function LoveLetterSite() {
   const reducedMotion = useReducedMotion();
+  const { playing: musicPlaying, toggle: toggleMusic } = useAmbientAudio();
   const [open, setOpen] = useState(false);
   const [unthreading, setUnthreading] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
@@ -294,29 +424,26 @@ export default function LoveLetterSite() {
     }
   }, []);
 
-  // Extra holds on the lines that are the actual emotional turns —
-  // not just "read slower everywhere," but a real beat where it matters.
-  const LINE_HOLD = { 12: 950, 17: 1500 };
-  const BASE_CHAR_DELAY = 38;
+  // Extra holds on the emotionally weighted lines
+  const LINE_HOLD = { 3: 600, 7: 800, 12: 1400, 17: 2200 };
+  const BASE_CHAR_DELAY = 65; // slower — lets each word land like a breath
 
-  // Pause AFTER the character just typed, based on what it was and
-  // what's coming next — so a run of dots ("…") reads as one held
-  // breath instead of several stutter-stops, a comma gets a short
-  // lift, and a period/ellipsis/! gets a real stop.
+  // Pause tuned to poetic reading: commas breathe, dots stop, ellipses hold.
   const extraCharPause = (justTyped, upcoming) => {
     if (!justTyped) return 0;
-    if (justTyped === ",") return 190;
-    if (justTyped === "!" || justTyped === "?") return 400;
-    if (justTyped === "." || justTyped === "…") {
-      if (upcoming === "." || upcoming === "…") return 25; // mid-run, keep going
-      return 430; // end of the pause
+    if (justTyped === ",") return 340;
+    if (justTyped === "!") return 580;
+    if (justTyped === "?") return 520;
+    if (justTyped === "." || justTyped === "\u2026") {
+      if (upcoming === "." || upcoming === "\u2026") return 30;
+      return 700; // full-stop breath
     }
     return 0;
   };
 
   const endOfLinePause = (line, idx) => {
-    if (line.length === 0) return 950; // stanza breath
-    const base = 480 + Math.min(line.length * 3, 380);
+    if (line.length === 0) return 2100; // stanza break — full beat of silence
+    const base = 750 + Math.min(line.length * 4, 520);
     return base + (LINE_HOLD[idx] || 0);
   };
 
@@ -483,8 +610,53 @@ export default function LoveLetterSite() {
           font-weight: 500;
           letter-spacing: 0.06em;
           font-size: clamp(1rem, 2.4vw, 1.25rem);
-          margin-bottom: 22px;
+          margin-bottom: 10px;
           opacity: 0.85;
+        }
+
+        .tl-music-row {
+          display: flex;
+          justify-content: center;
+          margin-bottom: 16px;
+        }
+
+        .tl-music-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: transparent;
+          border: 1px solid rgba(216,180,106,0.35);
+          border-radius: 999px;
+          padding: 5px 14px 5px 10px;
+          cursor: pointer;
+          color: rgba(233,211,163,0.7);
+          font-family: 'Caveat', cursive;
+          font-size: 1rem;
+          letter-spacing: 0.08em;
+          transition: all 0.3s ease;
+        }
+        .tl-music-btn:hover {
+          border-color: rgba(216,180,106,0.7);
+          color: var(--gold-soft);
+          background: rgba(216,180,106,0.08);
+        }
+        .tl-music-btn.tl-music-on {
+          border-color: var(--gold);
+          color: var(--gold-soft);
+          background: rgba(216,180,106,0.12);
+          box-shadow: 0 0 12px rgba(216,180,106,0.25);
+        }
+        .tl-music-icon {
+          font-size: 1.1rem;
+          line-height: 1;
+          animation: tl-music-pulse 2s ease-in-out infinite;
+        }
+        .tl-music-btn:not(.tl-music-on) .tl-music-icon {
+          animation: none;
+        }
+        @keyframes tl-music-pulse {
+          0%, 100% { opacity: 0.8; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.15); }
         }
 
         .tl-card-wrap {
@@ -896,6 +1068,24 @@ export default function LoveLetterSite() {
 
       <div className="tl-scene">
         <p className="tl-heading">for the one who keeps asking how</p>
+
+        <div className="tl-music-row">
+          <button
+            className={`tl-music-btn ${musicPlaying ? "tl-music-on" : ""}`}
+            onClick={toggleMusic}
+            aria-label={musicPlaying ? "Pause music" : "Play ambient music"}
+            title={musicPlaying ? "Pause music" : "Play ambient music"}
+          >
+            {musicPlaying ? (
+              <span className="tl-music-icon">▐▐</span>
+            ) : (
+              <span className="tl-music-icon">♪</span>
+            )}
+            <span className="tl-music-label">
+              {musicPlaying ? "pause" : "those eyes — ambient"}
+            </span>
+          </button>
+        </div>
 
         <div
           className="tl-card-wrap"
