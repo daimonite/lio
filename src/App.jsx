@@ -225,14 +225,27 @@ function StitchedHeart({ progress, size = 120, sealed = false, className = "" })
 }
 
 /* ------------------------------------------------------------------
-   MUSIC PLAYER — Cinnamon Girl (piano karaoke instrumental, no vocals)
-   via the YouTube IFrame Player API. We start the player muted, because
-   muted autoplay is the one thing every browser allows (even iOS/Safari).
-   The instant it's ready we unmute & play — still inside the user's tap,
-   which is what browsers require for sound. If we just stuffed a hidden
-   `autoplay=1` iframe on the page, mobile browsers would silently stop it.
+   MUSIC PLAYER — Cinnamon Girl, CHORUS ONLY, looped.
+   We stream a stem-split instrumental of the ACTUAL original studio
+   production (vocals removed — so no lyrics, but it sounds like the
+   real record, not a piano cover). A plain <audio> element gives us
+   exact control, so we loop only the chorus window of the song.
+   Start behaviour: audio mounts muted on page load (muted autoplay is
+   the ONE thing browsers always allow). The instant the reader touches
+   anything — which on this page is the tap on the heart — we unmute, so
+   sound is already alive as the heart unthreads and the letter opens.
+   Fallback: if the instrumental file ever disappears, we fall back to
+   the piano karaoke cover on YouTube so the page is never silent.
 ------------------------------------------------------------------- */
-const MUSIC_VIDEO_ID = "3Ok3F8Dc2XI"; // "Cinnamon Girl" piano karaoke instrumental
+const INSTRUMENTAL_URL =
+  "https://hipstrumentals.com/wp-content/uploads/2024/02/Lana-Del-Rey-Cinnamon-Girl-Instrumental-Prod.-By-Lana-Del-Rey-Jack-Antonoff.mp3";
+// Original-song timestamps (from the studio master): chorus starts at
+// 0:41 ("There's things I wanna say to you…"), the chorus + post-chorus
+// hook ("…hold me, love me, touch me, honey, be the first who ever did")
+// resolves at 1:38. That whole window is what loops.
+const CHORUS_START = 41;
+const CHORUS_END = 98;
+const FALLBACK_VIDEO_ID = "3Ok3F8Dc2XI"; // piano karaoke instrumental cover
 
 let ytApiPromise = null;
 function loadYouTubeApi() {
@@ -254,27 +267,132 @@ function loadYouTubeApi() {
 function useMusicPlayer() {
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
-  const playerRef = useRef(null);
-  const hostRef = useRef(null);
-  const wantPlayRef = useRef(false);
+  const [waitingForTap, setWaitingForTap] = useState(false);
+  const audioRef = useRef(null);
+  const ytPlayerRef = useRef(null);
+  const ytHostRef = useRef(null);
+  const soundOnRef = useRef(false);
+  const chorusTimerRef = useRef(null);
 
-  const ensurePlayer = useCallback(async () => {
-    if (playerRef.current) return playerRef.current;
+  /* ----- build the <audio> player once ----- */
+  useEffect(() => {
+    let disposed = false;
+
+    const audio = new Audio(INSTRUMENTAL_URL);
+    audio.preload = "auto";
+    audio.loop = false; // we hand-roll the chorus loop
+    audio.volume = 0.92;
+    audioRef.current = audio;
+
+    const clampToChorus = () => {
+      if (audio.readyState < 1) return; // still loading metadata
+      const t = audio.currentTime;
+      if (!Number.isFinite(t)) return;
+      if (t >= CHORUS_END - 0.15 || t < CHORUS_START - 1.5) {
+        try {
+          audio.currentTime = CHORUS_START;
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    audio.addEventListener("timeupdate", clampToChorus);
+    audio.addEventListener("play", () => {
+      clampToChorus();
+      if (!disposed) setPlaying(true);
+    });
+    audio.addEventListener("pause", () => {
+      if (!disposed) setPlaying(false);
+    });
+    audio.addEventListener("ended", () => {
+      try {
+        audio.currentTime = CHORUS_START;
+        audio.play();
+      } catch {
+        /* ignore */
+      }
+    });
+
+    const enableSound = () => {
+      if (soundOnRef.current) return;
+      soundOnRef.current = true;
+      try {
+        audio.muted = false;
+        audio.play();
+      } catch {
+        /* ignore */
+      }
+      if (!disposed) setWaitingForTap(false);
+    };
+
+    const onGesture = () => enableSound();
+
+    // attach the "unmute on first touch" listeners immediately, so the
+    // moment the reader reaches for the heart the music goes live —
+    // even before this effect's async boot() has finished.
+    window.addEventListener("pointerdown", onGesture, { passive: true });
+    window.addEventListener("touchstart", onGesture, { passive: true });
+    window.addEventListener("keydown", onGesture);
+
+    const boot = async () => {
+      // Gum: try unmuted autoplay first — it works when the visitor has
+      // engaged with the site before. If the browser refuses, that's when
+      // we drop to zero-friction "tap anywhere" unmute.
+      try {
+        await audio.play();
+        soundOnRef.current = true;
+        if (!disposed) setWaitingForTap(false);
+      } catch {
+        audio.muted = true;
+        audio.play().catch(() => {});
+        if (!disposed) setWaitingForTap(true);
+      }
+    };
+
+    // keep the chorus window tight even if timeupdate is sparse
+    chorusTimerRef.current = window.setInterval(clampToChorus, 200);
+
+    audio.addEventListener("error", () => {
+      if (!disposed) {
+        clearInterval(chorusTimerRef.current);
+        setFailed(true);
+        setPlaying(false);
+      }
+    });
+
+    boot();
+
+    return () => {
+      disposed = true;
+      clearInterval(chorusTimerRef.current);
+      window.removeEventListener("pointerdown", onGesture);
+      window.removeEventListener("touchstart", onGesture);
+      window.removeEventListener("keydown", onGesture);
+      audio.pause();
+      audio.src = "";
+      audioRef.current = null;
+    };
+  }, []);
+
+  /* ----- YouTube fallback if the instrumental file dies ----- */
+  const ensureFallbackPlayer = useCallback(async () => {
+    if (ytPlayerRef.current) return ytPlayerRef.current;
     const YT = await loadYouTubeApi();
-    if (playerRef.current) return playerRef.current;
+    if (ytPlayerRef.current) return ytPlayerRef.current;
 
     const host = document.createElement("div");
     host.style.cssText =
       "position:fixed;left:-9999px;top:0;width:480px;height:270px;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(host);
-    hostRef.current = host;
+    ytHostRef.current = host;
 
     const player = new YT.Player(host, {
       width: "480",
       height: "270",
-      videoId: MUSIC_VIDEO_ID,
+      videoId: FALLBACK_VIDEO_ID,
       playerVars: {
-        autoplay: 1, // will be muted first, so this is allowed
+        autoplay: 1,
         mute: 1,
         controls: 0,
         showinfo: 0,
@@ -282,7 +400,7 @@ function useMusicPlayer() {
         iv_load_policy: 3,
         modestbranding: 1,
         loop: 1,
-        playlist: MUSIC_VIDEO_ID,
+        playlist: FALLBACK_VIDEO_ID,
       },
       events: {
         onReady: () => {
@@ -296,53 +414,62 @@ function useMusicPlayer() {
         },
         onError: () => {
           setFailed(true);
-          setPlaying(false);
-          wantPlayRef.current = false;
         },
       },
     });
-    playerRef.current = player;
+    ytPlayerRef.current = player;
     return player;
   }, []);
 
   const toggle = useCallback(() => {
-    if (playing) {
-      wantPlayRef.current = false;
-      playerRef.current?.pauseVideo();
-      setPlaying(false);
+    setFailed(false);
+    const audio = audioRef.current;
+    if (audio && !audio.paused) {
+      audio.pause();
       return;
     }
-    wantPlayRef.current = true;
-    setPlaying(true);
-    setFailed(false);
-    ensurePlayer().then((player) => {
+    if (audio) {
+      audio.play().catch(() => {
+        audio.muted = true;
+        audio.play().catch(() => {});
+        setWaitingForTap(true);
+      });
+      return;
+    }
+    // audio only exists if there was no error; if failed → use fallback
+    ensureFallbackPlayer().then((player) => {
       try {
         player.playVideo();
       } catch {
         /* swallow — player may still be initialising */
       }
     });
-  }, [playing, ensurePlayer]);
+  }, [ensureFallbackPlayer]);
 
   useEffect(
     () => () => {
       try {
-        playerRef.current?.destroy();
+        ytPlayerRef.current?.destroy();
       } catch {
         /* tearing down */
       }
-      hostRef.current?.remove();
+      ytHostRef.current?.remove();
     },
     []
   );
 
-  return { playing, toggle, failed };
+  return { playing, toggle, failed, waitingForTap };
 }
 
 
 export default function LoveLetterSite() {
   const reducedMotion = useReducedMotion();
-  const { playing: musicPlaying, toggle: toggleMusic, failed: musicFailed } = useMusicPlayer();
+  const {
+    playing: musicPlaying,
+    toggle: toggleMusic,
+    failed: musicFailed,
+    waitingForTap: musicWaitingForTap,
+  } = useMusicPlayer();
   const [open, setOpen] = useState(false);
   const [unthreading, setUnthreading] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
@@ -1073,12 +1200,14 @@ export default function LoveLetterSite() {
                 ? "pause"
                 : musicFailed
                   ? "couldn't load audio — tap to retry"
-                  : "cinnamon girl — instrumental"}
+                  : musicWaitingForTap
+                    ? "chorus loop — tap anywhere to turn sound on"
+                    : "cinnamon girl — chorus loop"}
             </span>
           </button>
         </div>
 
-        {/* Music is handled above via the YouTube IFrame API — no hidden iframe needed. */}
+        {/* The <audio> loop lives inside useMusicPlayer; nothing hidden on the page. */}
 
         <div
           className="tl-card-wrap"
