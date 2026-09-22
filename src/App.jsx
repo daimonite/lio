@@ -225,137 +225,124 @@ function StitchedHeart({ progress, size = 120, sealed = false, className = "" })
 }
 
 /* ------------------------------------------------------------------
-   AMBIENT AUDIO — generated entirely in-browser via Web Audio API.
-   An Am-chord pad + slow heartbeat bass + drifting melodic arpeggio.
-   No external files needed — works offline and on mobile.
+   MUSIC PLAYER — Cinnamon Girl (piano karaoke instrumental, no vocals)
+   via the YouTube IFrame Player API. We start the player muted, because
+   muted autoplay is the one thing every browser allows (even iOS/Safari).
+   The instant it's ready we unmute & play — still inside the user's tap,
+   which is what browsers require for sound. If we just stuffed a hidden
+   `autoplay=1` iframe on the page, mobile browsers would silently stop it.
 ------------------------------------------------------------------- */
-function useAmbientAudio() {
-  const ctxRef = useRef(null);
-  const masterRef = useRef(null);
-  const intervalsRef = useRef([]);
+const MUSIC_VIDEO_ID = "3Ok3F8Dc2XI"; // "Cinnamon Girl" piano karaoke instrumental
+
+let ytApiPromise = null;
+function loadYouTubeApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+  if (ytApiPromise) return ytApiPromise;
+  ytApiPromise = new Promise((resolve) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof prev === "function") prev();
+      resolve(window.YT);
+    };
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(script);
+  });
+  return ytApiPromise;
+}
+
+function useMusicPlayer() {
   const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const playerRef = useRef(null);
+  const hostRef = useRef(null);
+  const wantPlayRef = useRef(false);
 
-  const stop = useCallback(() => {
-    if (masterRef.current && ctxRef.current) {
-      const t = ctxRef.current.currentTime;
-      masterRef.current.gain.linearRampToValueAtTime(0, t + 1.8);
-    }
-    intervalsRef.current.forEach(id => clearInterval(id));
-    intervalsRef.current = [];
-    setTimeout(() => {
-      if (ctxRef.current) { ctxRef.current.close(); ctxRef.current = null; }
-      masterRef.current = null;
-    }, 2000);
-    setPlaying(false);
-  }, []);
+  const ensurePlayer = useCallback(async () => {
+    if (playerRef.current) return playerRef.current;
+    const YT = await loadYouTubeApi();
+    if (playerRef.current) return playerRef.current;
 
-  const start = useCallback(() => {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    ctxRef.current = ctx;
+    const host = document.createElement("div");
+    host.style.cssText =
+      "position:fixed;left:-9999px;top:0;width:480px;height:270px;opacity:0;pointer-events:none;z-index:-1;";
+    document.body.appendChild(host);
+    hostRef.current = host;
 
-    // Master bus with slow fade-in
-    const master = ctx.createGain();
-    master.gain.setValueAtTime(0, ctx.currentTime);
-    master.gain.linearRampToValueAtTime(0.28, ctx.currentTime + 4);
-    master.connect(ctx.destination);
-    masterRef.current = master;
-
-    // Am chord pad: A2, E3, A3, C4, E4, G4 — warm sine waves with subtle detuning
-    [
-      { freq: 110.0, gain: 0.22, detune: -4 },
-      { freq: 164.8, gain: 0.16, detune:  5 },
-      { freq: 220.0, gain: 0.18, detune: -2 },
-      { freq: 261.6, gain: 0.13, detune:  3 },
-      { freq: 329.6, gain: 0.10, detune: -5 },
-      { freq: 392.0, gain: 0.07, detune:  2 },
-    ].forEach(({ freq, gain, detune }) => {
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      osc.detune.value = detune;
-      g.gain.value = gain;
-      osc.connect(g);
-      g.connect(master);
-      osc.start();
+    const player = new YT.Player(host, {
+      width: "480",
+      height: "270",
+      videoId: MUSIC_VIDEO_ID,
+      playerVars: {
+        autoplay: 1, // will be muted first, so this is allowed
+        mute: 1,
+        controls: 0,
+        showinfo: 0,
+        rel: 0,
+        iv_load_policy: 3,
+        modestbranding: 1,
+        loop: 1,
+        playlist: MUSIC_VIDEO_ID,
+      },
+      events: {
+        onReady: () => {
+          try {
+            player.setVolume(100);
+            player.unMute();
+            player.playVideo();
+          } catch {
+            /* play inside the gesture that created the player */
+          }
+        },
+        onError: () => {
+          setFailed(true);
+          setPlaying(false);
+          wantPlayRef.current = false;
+        },
+      },
     });
-
-    // Slow tremolo LFO — 0.18 Hz = very gentle breathing swell
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.type = "sine";
-    lfo.frequency.value = 0.18;
-    lfoGain.gain.value = 0.06;
-    lfo.connect(lfoGain);
-    lfoGain.connect(master.gain);
-    lfo.start();
-
-    // Melodic arpeggio — Am7 notes cycling every 2.4 s
-    const melody = [440.0, 523.2, 659.3, 783.9, 523.2, 392.0];
-    let noteIdx = 0;
-    const playNote = () => {
-      if (!ctxRef.current || ctxRef.current.state === "closed") return;
-      const t = ctxRef.current.currentTime;
-      const osc = ctxRef.current.createOscillator();
-      const env = ctxRef.current.createGain();
-      osc.type = "sine";
-      osc.frequency.value = melody[noteIdx % melody.length];
-      noteIdx++;
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(0.045, t + 0.4);
-      env.gain.linearRampToValueAtTime(0.028, t + 1.2);
-      env.gain.linearRampToValueAtTime(0, t + 2.3);
-      osc.connect(env); env.connect(master);
-      osc.start(t); osc.stop(t + 2.4);
-    };
-    playNote();
-    intervalsRef.current.push(setInterval(playNote, 2400));
-
-    // Heartbeat bass: lub-DUB at ~62 BPM, very soft
-    const beatMs = (60 / 62) * 1000;
-    const playHeartbeat = () => {
-      if (!ctxRef.current || ctxRef.current.state === "closed") return;
-      const t = ctxRef.current.currentTime;
-      const b1 = ctxRef.current.createOscillator();
-      const g1 = ctxRef.current.createGain();
-      b1.type = "sine"; b1.frequency.value = 52;
-      g1.gain.setValueAtTime(0, t);
-      g1.gain.linearRampToValueAtTime(0.13, t + 0.04);
-      g1.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
-      b1.connect(g1); g1.connect(master);
-      b1.start(t); b1.stop(t + 0.4);
-      const b2 = ctxRef.current.createOscillator();
-      const g2 = ctxRef.current.createGain();
-      b2.type = "sine"; b2.frequency.value = 46;
-      g2.gain.setValueAtTime(0, t + 0.2);
-      g2.gain.linearRampToValueAtTime(0.09, t + 0.24);
-      g2.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
-      b2.connect(g2); g2.connect(master);
-      b2.start(t + 0.2); b2.stop(t + 0.6);
-    };
-    playHeartbeat();
-    intervalsRef.current.push(setInterval(playHeartbeat, beatMs));
-
-    setPlaying(true);
+    playerRef.current = player;
+    return player;
   }, []);
 
   const toggle = useCallback(() => {
-    if (playing) stop(); else start();
-  }, [playing, start, stop]);
+    if (playing) {
+      wantPlayRef.current = false;
+      playerRef.current?.pauseVideo();
+      setPlaying(false);
+      return;
+    }
+    wantPlayRef.current = true;
+    setPlaying(true);
+    setFailed(false);
+    ensurePlayer().then((player) => {
+      try {
+        player.playVideo();
+      } catch {
+        /* swallow — player may still be initialising */
+      }
+    });
+  }, [playing, ensurePlayer]);
 
-  useEffect(() => () => {
-    intervalsRef.current.forEach(id => clearInterval(id));
-    if (ctxRef.current) ctxRef.current.close();
-  }, []);
+  useEffect(
+    () => () => {
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        /* tearing down */
+      }
+      hostRef.current?.remove();
+    },
+    []
+  );
 
-  return { playing, toggle };
+  return { playing, toggle, failed };
 }
+
 
 export default function LoveLetterSite() {
   const reducedMotion = useReducedMotion();
-  const { playing: musicPlaying, toggle: toggleMusic } = useAmbientAudio();
+  const { playing: musicPlaying, toggle: toggleMusic, failed: musicFailed } = useMusicPlayer();
   const [open, setOpen] = useState(false);
   const [unthreading, setUnthreading] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
@@ -1073,8 +1060,8 @@ export default function LoveLetterSite() {
           <button
             className={`tl-music-btn ${musicPlaying ? "tl-music-on" : ""}`}
             onClick={toggleMusic}
-            aria-label={musicPlaying ? "Pause music" : "Play ambient music"}
-            title={musicPlaying ? "Pause music" : "Play ambient music"}
+            aria-label={musicPlaying ? "Pause music" : "Play Cinnamon Girl instrumental"}
+            title={musicPlaying ? "Pause music" : "Play Cinnamon Girl instrumental"}
           >
             {musicPlaying ? (
               <span className="tl-music-icon">▐▐</span>
@@ -1082,10 +1069,16 @@ export default function LoveLetterSite() {
               <span className="tl-music-icon">♪</span>
             )}
             <span className="tl-music-label">
-              {musicPlaying ? "pause" : "those eyes — ambient"}
+              {musicPlaying
+                ? "pause"
+                : musicFailed
+                  ? "couldn't load audio — tap to retry"
+                  : "cinnamon girl — instrumental"}
             </span>
           </button>
         </div>
+
+        {/* Music is handled above via the YouTube IFrame API — no hidden iframe needed. */}
 
         <div
           className="tl-card-wrap"
