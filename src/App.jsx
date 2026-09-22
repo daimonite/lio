@@ -53,6 +53,134 @@ function seeded(seed) {
   };
 }
 
+function YarnHeart({ unthreading = false, size = 135, className = "" }) {
+  const yarnStrands = [
+    { d: "M 80,132 C 48,110 16,82 16,46 C 16,22 34,8 56,8 C 68,8 76,14 80,22", delay: 0.1, length: 180, gold: false },
+    { d: "M 80,22 C 84,14 92,8 104,8 C 126,8 144,22 144,46 C 144,82 112,110 80,132", delay: 0.18, length: 180, gold: false },
+    { d: "M 32,36 C 42,20 64,20 72,34 C 78,46 72,62 58,66 C 44,70 30,58 32,42", delay: 0.28, length: 160, gold: false },
+    { d: "M 128,36 C 118,20 96,20 88,34 C 82,46 88,62 102,66 C 116,70 130,58 128,42", delay: 0.38, length: 160, gold: false },
+    { d: "M 28,70 C 48,94 92,54 128,38 C 138,33 140,48 124,66 C 98,94 68,116 80,132", delay: 0.48, length: 220, gold: false },
+    { d: "M 132,70 C 112,94 68,54 32,38 C 22,33 20,48 36,66 C 62,94 92,116 80,132", delay: 0.58, length: 220, gold: false },
+    { d: "M 50,20 C 68,32 94,66 114,88 C 122,96 112,106 98,102 C 76,92 52,62 46,44", delay: 0.68, length: 190, gold: true },
+    { d: "M 34,54 Q 80,68 126,54", delay: 0.76, length: 100, gold: false },
+    { d: "M 38,72 Q 80,86 122,72", delay: 0.84, length: 90, gold: false },
+    { d: "M 46,88 Q 80,100 114,88", delay: 0.92, length: 80, gold: false },
+    { d: "M 56,104 Q 80,114 104,104", delay: 0.98, length: 60, gold: true },
+  ];
+
+  return (
+    <div className={`tl-yarn-heart-wrap ${unthreading ? "tl-yarn-unthreading" : ""} ${className}`}>
+      <svg
+        viewBox="0 0 160 176"
+        width={size}
+        height={size * 1.1}
+        className="tl-yarn-svg"
+        role="img"
+        aria-label={unthreading ? "Unthreading heart of yarn" : "Heart of yarn, tap to unthread"}
+      >
+        <defs>
+          <radialGradient id="woolCoreGrad" cx="45%" cy="40%" r="58%">
+            <stop offset="0%" stopColor="#d94b70" />
+            <stop offset="50%" stopColor="#9e1f48" />
+            <stop offset="85%" stopColor="#5a0b29" />
+            <stop offset="100%" stopColor="#350416" />
+          </radialGradient>
+
+          <linearGradient id="woolStrandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffb3c6" />
+            <stop offset="40%" stopColor="#ea5b82" />
+            <stop offset="80%" stopColor="#b52350" />
+            <stop offset="100%" stopColor="#7a1032" />
+          </linearGradient>
+
+          <linearGradient id="goldStrandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#fff6d6" />
+            <stop offset="45%" stopColor="#f0c265" />
+            <stop offset="85%" stopColor="#b6832e" />
+            <stop offset="100%" stopColor="#69430c" />
+          </linearGradient>
+
+          <filter id="yarnBallShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="6" stdDeviation="5" floodColor="#1a0410" floodOpacity="0.6" />
+          </filter>
+        </defs>
+
+        <path
+          d="M 80,132 C 48,110 16,82 16,46 C 16,22 34,8 56,8 C 68,8 76,14 80,22 C 84,14 92,8 104,8 C 126,8 144,22 144,46 C 144,82 112,110 80,132 Z"
+          fill="url(#woolCoreGrad)"
+          filter="url(#yarnBallShadow)"
+          className="tl-yarn-core"
+        />
+
+        <g className="tl-yarn-strands">
+          {yarnStrands.map((s, idx) => (
+            <path
+              key={idx}
+              d={s.d}
+              className={`tl-yarn-strand ${s.gold ? "tl-gold-strand" : "tl-wool-strand"}`}
+              style={{
+                strokeDasharray: s.length,
+                strokeDashoffset: 0,
+                animationDelay: `${s.delay}s`,
+              }}
+            />
+          ))}
+        </g>
+
+        <g className="tl-yarn-fibers">
+          {[
+            { x1: 76, y1: 34, x2: 84, y2: 40 },
+            { x1: 74, y1: 52, x2: 86, y2: 58 },
+            { x1: 75, y1: 70, x2: 85, y2: 76 },
+            { x1: 77, y1: 90, x2: 83, y2: 96 },
+          ].map((f, i) => (
+            <line
+              key={i}
+              x1={f.x1}
+              y1={f.y1}
+              x2={f.x2}
+              y2={f.y2}
+              className="tl-yarn-fiber"
+              style={{ animationDelay: `${0.2 + i * 0.15}s` }}
+            />
+          ))}
+        </g>
+
+        {!unthreading && (
+          <path
+            d="M 80,132 C 82,142 88,150 82,158 C 76,166 66,160 68,150 C 70,142 78,144 86,150 C 92,155 94,162 90,167"
+            className="tl-yarn-tail"
+          />
+        )}
+
+        {unthreading && (
+          <path
+            d="M 80,132 C 95,148 120,154 136,138 C 152,122 135,92 145,74 C 155,56 182,58 198,82 C 214,106 242,112 270,95"
+            className="tl-yarn-unspool-wave"
+          />
+        )}
+      </svg>
+
+      {unthreading && (
+        <div className="tl-yarn-fuzz-layer">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <span
+              key={i}
+              className="tl-yarn-fuzz"
+              style={{
+                "--i": i,
+                "--angle": `${i * 30}deg`,
+                "--dist": `${35 + (i % 4) * 20}px`,
+                animationDelay: `${(i % 5) * 0.12}s`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StitchedHeart({ progress, size = 120, sealed = false, className = "" }) {
   const stitchCount = 6;
   const heartPath =
@@ -99,6 +227,7 @@ function StitchedHeart({ progress, size = 120, sealed = false, className = "" })
 export default function LoveLetterSite() {
   const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
+  const [unthreading, setUnthreading] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
   const [charIdx, setCharIdx] = useState(0);
   const [done, setDone] = useState(false);
@@ -107,6 +236,7 @@ export default function LoveLetterSite() {
   const cardWrapRef = useRef(null);
   const scrollRef = useRef(null);
   const timerRef = useRef(null);
+  const unthreadTimerRef = useRef(null);
 
   const totalChars = useMemo(
     () => POEM_LINES.reduce((sum, l) => sum + Math.max(l.length, 1), 0),
@@ -226,10 +356,32 @@ export default function LoveLetterSite() {
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [lineIdx, charIdx]);
 
-  const handleOpen = () => {
+  const handleTapHeart = () => {
     if (open) return;
-    setOpen(true);
+    if (unthreading) {
+      if (unthreadTimerRef.current) clearTimeout(unthreadTimerRef.current);
+      setUnthreading(false);
+      setOpen(true);
+      return;
+    }
+
+    if (reducedMotion) {
+      setOpen(true);
+      return;
+    }
+
+    setUnthreading(true);
+    unthreadTimerRef.current = setTimeout(() => {
+      setOpen(true);
+      setUnthreading(false);
+    }, 1600);
   };
+
+  useEffect(() => {
+    return () => {
+      if (unthreadTimerRef.current) clearTimeout(unthreadTimerRef.current);
+    };
+  }, []);
 
   const handleSkip = () => {
     clearTimer();
@@ -240,6 +392,15 @@ export default function LoveLetterSite() {
 
   const handleReplay = () => {
     clearTimer();
+    setDone(false);
+    setLineIdx(0);
+    setCharIdx(0);
+  };
+
+  const handleCloseLetter = () => {
+    clearTimer();
+    setOpen(false);
+    setUnthreading(false);
     setDone(false);
     setLineIdx(0);
     setCharIdx(0);
@@ -376,31 +537,194 @@ export default function LoveLetterSite() {
 
         .tl-seal-label {
           font-family: 'Caveat', cursive;
-          font-size: clamp(1.4rem, 4vw, 1.9rem);
+          font-size: clamp(1.45rem, 4.2vw, 1.95rem);
           color: var(--gold-soft);
-          opacity: 0.9;
-        }
-        .tl-seal-sub {
-          font-size: 0.85rem;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: rgba(244,233,236,0.55);
+          opacity: 0.95;
+          text-align: center;
+          transition: transform 0.25s ease, opacity 0.25s ease;
         }
 
-        .tl-heart { transition: transform 0.3s ease; }
-        .tl-face-front button.tl-seal-btn {
-          background: none; border: none; padding: 14px; cursor: pointer;
+        /* ---------------- HEART OF YARN STYLES ---------------- */
+        .tl-seal-btn {
+          background: none;
+          border: none;
+          padding: 8px;
+          cursor: pointer;
           border-radius: 50%;
-          transition: transform 0.25s ease, filter 0.25s ease;
+          position: relative;
+          outline: none;
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-        .tl-face-front button.tl-seal-btn:hover .tl-heart,
-        .tl-face-front button.tl-seal-btn:focus-visible .tl-heart {
-          transform: scale(1.06);
-          filter: drop-shadow(0 0 14px rgba(216,180,106,0.55));
-        }
-        .tl-face-front button.tl-seal-btn:focus-visible {
+        .tl-seal-btn:focus-visible {
           outline: 2px solid var(--gold-soft);
           outline-offset: 4px;
+        }
+
+        .tl-yarn-heart-wrap {
+          position: relative;
+          display: inline-block;
+          transition: transform 0.3s ease;
+        }
+
+        .tl-seal-btn:hover .tl-yarn-heart-wrap {
+          transform: scale(1.06);
+          filter: drop-shadow(0 0 16px rgba(231,139,160,0.45));
+        }
+
+        .tl-yarn-core {
+          transition: transform 0.8s ease, opacity 0.8s ease;
+          transform-origin: 80px 80px;
+        }
+
+        .tl-wool-strand {
+          fill: none;
+          stroke: url(#woolStrandGrad);
+          stroke-width: 3.2;
+          stroke-linecap: round;
+          filter: drop-shadow(0 1px 2px rgba(40,4,16,0.4));
+        }
+
+        .tl-gold-strand {
+          fill: none;
+          stroke: url(#goldStrandGrad);
+          stroke-width: 2.4;
+          stroke-linecap: round;
+          filter: drop-shadow(0 0 3px rgba(240,194,101,0.6));
+        }
+
+        .tl-yarn-fiber {
+          stroke: var(--gold-soft);
+          stroke-width: 1.8;
+          stroke-linecap: round;
+          opacity: 0.85;
+        }
+
+        /* Loose yarn tail gentle sway */
+        .tl-yarn-tail {
+          fill: none;
+          stroke: url(#woolStrandGrad);
+          stroke-width: 3;
+          stroke-linecap: round;
+          transform-origin: 80px 132px;
+          animation: tl-tail-sway 3.2s ease-in-out infinite;
+        }
+        @keyframes tl-tail-sway {
+          0%, 100% { transform: rotate(0deg); }
+          50% { transform: rotate(8deg); }
+        }
+
+        /* ---------------- UNTHREADING ANIMATION SEQUENCE ---------------- */
+        .tl-yarn-unthreading .tl-yarn-svg {
+          animation: tl-yarn-spin-unwind 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+          transform-origin: 80px 75px;
+        }
+
+        @keyframes tl-yarn-spin-unwind {
+          0% { transform: scale(1) rotate(0deg); }
+          30% { transform: scale(1.08) rotate(-6deg); }
+          70% { transform: scale(0.92) rotate(14deg); }
+          100% { transform: scale(0.7) rotate(-22deg) translateY(-8px); opacity: 0.15; }
+        }
+
+        .tl-yarn-unthreading .tl-yarn-core {
+          animation: tl-core-unravel 1.4s ease-in-out forwards;
+        }
+
+        @keyframes tl-core-unravel {
+          0% { transform: scale(1); opacity: 1; }
+          60% { transform: scale(0.85); opacity: 0.8; }
+          100% { transform: scale(0.5); opacity: 0.05; }
+        }
+
+        .tl-yarn-unthreading .tl-yarn-strand {
+          animation: tl-strand-unwind 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        @keyframes tl-strand-unwind {
+          0% {
+            stroke-dashoffset: 0;
+            opacity: 1;
+          }
+          60% {
+            opacity: 0.9;
+          }
+          100% {
+            stroke-dashoffset: -260;
+            opacity: 0;
+          }
+        }
+
+        .tl-yarn-unthreading .tl-yarn-fiber {
+          animation: tl-fiber-scatter 0.9s ease-out forwards;
+        }
+
+        @keyframes tl-fiber-scatter {
+          0% { opacity: 0.85; transform: translate(0, 0); }
+          100% { opacity: 0; transform: translate(15px, -20px) scale(0); }
+        }
+
+        .tl-yarn-unspool-wave {
+          fill: none;
+          stroke: url(#goldStrandGrad);
+          stroke-width: 3.5;
+          stroke-linecap: round;
+          stroke-dasharray: 320;
+          stroke-dashoffset: 320;
+          filter: drop-shadow(0 0 6px rgba(240,194,101,0.8));
+          animation: tl-pull-thread 1.45s ease-out forwards;
+        }
+
+        @keyframes tl-pull-thread {
+          0% {
+            stroke-dashoffset: 320;
+            opacity: 0;
+          }
+          20% {
+            opacity: 1;
+          }
+          75% {
+            stroke-dashoffset: 60;
+            opacity: 1;
+          }
+          100% {
+            stroke-dashoffset: 0;
+            opacity: 0;
+            transform: translateX(40px) translateY(-25px);
+          }
+        }
+
+        .tl-yarn-fuzz-layer {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+        }
+
+        .tl-yarn-fuzz {
+          position: absolute;
+          top: 45%;
+          left: 50%;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--rose);
+          box-shadow: 0 0 8px var(--gold);
+          opacity: 0;
+          animation: tl-fuzz-scatter 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes tl-fuzz-scatter {
+          0% {
+            opacity: 1;
+            transform: translate(-50%, -50%) rotate(0deg) scale(0.6);
+          }
+          100% {
+            opacity: 0;
+            transform:
+              translate(-50%, -50%)
+              rotate(var(--angle))
+              translateX(var(--dist))
+              scale(1.4);
+          }
         }
 
         .tl-heart-base { fill: rgba(231,139,160,0.12); stroke: rgba(231,139,160,0.35); stroke-width: 1.4; }
@@ -587,26 +911,28 @@ export default function LoveLetterSite() {
                 : { "--rx": `${tilt.x}deg`, "--ry": `${tilt.y}deg` }
             }
           >
-            <div className="tl-face tl-face-front" onClick={handleOpen}>
+            <div className="tl-face tl-face-front" onClick={handleTapHeart}>
               <span className="tl-seal-sub">a letter, sealed</span>
               <button
                 className="tl-seal-btn"
-                aria-label="Open the letter"
+                aria-label="Tap to unthread the heart of yarn and open letter"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleOpen();
+                  handleTapHeart();
                 }}
               >
-                <StitchedHeart progress={open ? 1 : 0.02} sealed size={110} />
+                <YarnHeart unthreading={unthreading} size={140} />
               </button>
-              <span className="tl-seal-label">touch the thread to open</span>
+              <span className="tl-seal-label">
+                {unthreading ? "unthreading the heart of yarn…" : "tap the heart of yarn to open"}
+              </span>
             </div>
 
             <div className="tl-face tl-face-back">
               <div className="tl-back-header">
                 <span className="tl-mark">thread &amp; heart</span>
                 <div className="tl-mini-heart">
-                  <StitchedHeart progress={progress} size={30} />
+                  <StitchedHeart progress={progress} size={32} />
                 </div>
               </div>
 
@@ -646,6 +972,9 @@ export default function LoveLetterSite() {
                     read it again
                   </button>
                 )}
+                <button className="tl-btn" onClick={handleCloseLetter} title="Seal the letter back">
+                  fold back
+                </button>
               </div>
 
               <div className="tl-mend-heart-holder">
